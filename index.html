@@ -300,7 +300,10 @@ function hilite(id) {
 
 function leafletMap() {
   const map = L.map('map').setView([CENTER.lat, CENTER.lng], 15);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom:19, subdomains:'abcd', attribution:'© OpenStreetMap © CARTO' }).addTo(map);
+  // 웹에 올린 페이지에서는 CARTO 배경이 막히므로 OpenStreetMap 배경을 쓴다 (PC에서 파일로 열 때는 CARTO)
+  const local = location.protocol === 'file:' || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+  if (local) L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom:19, subdomains:'abcd', attribution:'© OpenStreetMap © CARTO' }).addTo(map);
+  else L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'© OpenStreetMap' }).addTo(map);
   const layer = L.layerGroup().addTo(map);
   map.on('click', e => { if (pickingId) setPos(e.latlng.lat, e.latlng.lng); });
   return {
