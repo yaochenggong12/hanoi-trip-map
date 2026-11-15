@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>하노이 여행 지도</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root { --ink:#1f2933; --sub:#6b7780; --line:#e3e7ea; --bg:#f6f7f8; --card:#fff; --accent:#d9480f; --accent-soft:#fff1e8; }
+  * { box-sizing:border-box; }
+  html, body { height:100%; margin:0; }
+  body { font-family:"Pretendard","Malgun Gothic",system-ui,sans-serif; color:var(--ink); background:var(--bg); display:flex; flex-direction:column; }
+  header { padding:10px 16px; background:var(--card); border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:17px; margin:0; margin-right:auto; }
+  header h1 small { font-weight:400; color:var(--sub); font-size:12px; margin-left:6px; }
+  button { font:inherit; cursor:pointer; border:1px solid var(--line); background:var(--card); border-radius:8px; padding:6px 10px; color:var(--ink); }
+  button:hover { border-color:var(--accent); }
+  .tabs { display:flex; gap:6px; padding:8px 16px; background:var(--card); border-bottom:1px solid var(--line); overflow-x:auto; }
+  .tabs button { white-space:nowrap; border-radius:999px; padding:6px 14px; }
+  .tabs button.on { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  main { flex:1; min-height:0; display:grid; grid-template-columns:400px 1fr; }
+  #panel { overflow-y:auto; padding:12px 16px 24px; border-right:1px solid var(--line); background:var(--bg); }
+  #map { min-height:0; }
+  .dayhead { display:flex; align-items:baseline; gap:8px; margin:4px 0 10px; }
+  .dayhead h2 { font-size:16px; margin:0; }
+  .dayhead span { color:var(--sub); font-size:13px; }
+  .stop { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 10px; margin-bottom:8px; display:grid; grid-template-columns:28px 1fr; gap:8px; }
+  .stop.picking { border-color:var(--accent); background:var(--accent-soft); }
+  .stop.active { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft); }
+  .stop.has-pos { cursor:pointer; }
+  .row1 { flex-wrap:wrap; }
+  .row1 .title { flex:1 1 180px; min-width:0; }
+  .num { width:26px; height:26px; border-radius:50%; background:var(--accent); color:#fff; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; margin-top:2px; }
+  .num.none { background:#c5ccd1; }
+  .row1 { display:flex; gap:6px; align-items:center; }
+  .stop input, .stop textarea { font:inherit; border:1px solid transparent; border-radius:6px; padding:3px 5px; background:transparent; color:var(--ink); width:100%; }
+  .stop input:hover, .stop textarea:hover, .stop input:focus, .stop textarea:focus { border-color:var(--line); background:#fff; outline:none; }
+  .stop input[type=time] { width:124px; flex:none; font-weight:600; color:var(--accent); }
+  .stop .title { font-weight:600; }
+  .stop textarea { font-size:13px; color:var(--sub); resize:none; overflow:hidden; line-height:1.45; }
+  .tip { margin:4px 0 2px; font-size:13px; }
+  .tip summary { cursor:pointer; color:var(--accent); font-weight:600; padding:3px 5px; width:max-content; }
+  .tip p { margin:4px 0 0; padding:8px 10px; background:var(--accent-soft); border-radius:8px; line-height:1.6; color:var(--ink); }
+  .acts { display:flex; gap:6px; margin-top:4px; flex-wrap:wrap; }
+  .acts button, .acts a { font-size:12px; padding:3px 8px; border-radius:6px; border:1px solid var(--line); background:#fff; color:var(--sub); text-decoration:none; }
+  .acts a:hover, .acts button:hover { color:var(--accent); border-color:var(--accent); }
+  .add { width:100%; padding:10px; border-style:dashed; color:var(--sub); }
+  .hint { font-size:12px; color:var(--sub); margin:10px 2px 0; line-height:1.5; }
+  .banner { display:none; position:absolute; z-index:1000; left:50%; transform:translateX(-50%); top:10px; background:var(--accent); color:#fff; padding:8px 14px; border-radius:999px; font-size:13px; box-shadow:0 2px 8px rgba(0,0,0,.25); }
+  .mapwrap { position:relative; min-height:0; }
+  .mapwrap #map { position:absolute; inset:0; }
+  .pin { width:28px; height:28px; border-radius:50%; background:var(--accent); color:#fff; font-weight:700; font-size:13px; display:flex; align-items:center; justify-content:center; border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.4); }
+  .cand { width:14px; height:14px; border-radius:50%; background:#5c7c99; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.4); }
+  .leaflet-popup-content { font-family:inherit; font-size:13px; margin:10px 12px; }
+  .leaflet-popup-content b { font-size:14px; }
+  .leaflet-popup-content button { margin-top:6px; font-size:12px; padding:4px 8px; }
+  dialog { border:none; border-radius:14px; padding:20px; width:min(440px, calc(100vw - 32px)); box-shadow:0 10px 40px rgba(0,0,0,.3); color:var(--ink); }
+  dialog::backdrop { background:rgba(0,0,0,.4); }
+  dialog h3 { margin:0 0 6px; font-size:16px; }
+  dialog p { margin:0 0 12px; font-size:13px; color:var(--sub); line-height:1.5; }
+  dialog input { width:100%; font:inherit; padding:9px 10px; border:1px solid var(--line); border-radius:8px; }
+  dialog input:focus { outline:2px solid var(--accent); border-color:transparent; }
+  .dlgacts { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  @media (max-width: 760px) {
+    main { grid-template-columns:1fr; grid-template-rows:42vh 1fr; }
+    .mapwrap { order:-1; }
+    #panel { border-right:none; border-top:1px solid var(--line); }
+    header h1 small { display:none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>하노이 여행 <small>2026.12.3 ~ 12.7 · 수정하면 자동 저장</small></h1>
+  <button id="btnKey">구글맵으로 보기</button>
+  <button id="btnExport">내보내기</button>
+  <button id="btnImport">가져오기</button>
+  <button id="btnReset">처음 일정으로</button>
+  <input type="file" id="file" accept=".json" hidden>
+</header>
+<dialog id="keyDlg">
+  <form id="keyForm">
+    <h3>구글맵 API 키</h3>
+    <p>Google Cloud 콘솔에서 복사한 Maps JavaScript API 키를 붙여넣으세요. 키는 이 브라우저에만 저장됩니다.</p>
+    <input id="keyInput" type="text" autocomplete="off" spellcheck="false" placeholder="AIza...">
+    <div class="dlgacts">
+      <button type="button" id="keyClear">무료 지도로 돌아가기</button>
+      <span style="flex:1"></span>
+      <button type="button" id="keyCancel">취소</button>
+      <button type="submit" class="primary">저장</button>
+    </div>
+  </form>
+</dialog>
+<div class="tabs" id="tabs"></div>
+<main>
+  <section id="panel"></section>
+  <div class="mapwrap"><div class="banner" id="banner">지도를 눌러 위치를 정하세요 (저장한 장소 점을 눌러도 됩니다)</div><div id="map"></div></div>
+</main>
+
+<script>
+// ───────── 데이터 ─────────
+const DAYS = [
+  { key:'12-03', label:'12/3 목', title:'도착 · 올드쿼터', sub:'숙소: 14B Lý Nam Đế' },
+  { key:'12-04', label:'12/4 금', title:'하롱베이 크루즈', sub:'칼리스타 크루즈 1박' },
+  { key:'12-05', label:'12/5 토', title:'하노이 복귀 · 야시장', sub:'숙소: Oakwood Residence' },
+  { key:'12-06', label:'12/6 일', title:'서호 · 롯데', sub:'숙소: Oakwood Residence' },
+  { key:'12-07', label:'12/7 월', title:'귀국', sub:'16:35 하노이 출발' },
+];
+
+// 구글맵 "하노이" 리스트에서 가져온 장소 (좌표 포함)
+const PLACES = [
+  { name:'12/2~4 숙소 (14B Lý Nam Đế)', lat:21.03713, lng:105.84530, memo:'에어비앤비 · 구시가지' },
+  { name:'Oakwood Residence Hanoi', lat:21.06245, lng:105.82584, memo:'12/5~7 숙소 · 17/35 Đặng Thai Mai' },
+  { name:'노이바이 국제공항', lat:21.21780, lng:105.80255, memo:'국제선 터미널 2' },
+  { name:'반미 25', lat:21.03611, lng:105.84858, memo:'샌드위치' },
+  { name:'분짜닥킴', lat:21.03225, lng:105.84821, memo:'분짜' },
+  { name:'퍼 자쭈옌', lat:21.03362, lng:105.84651, memo:'쌀국수' },
+  { name:'미도 스파', lat:21.03193, lng:105.84836, memo:'마사지' },
+  { name:'폭람 짠내투어', lat:21.03520, lng:105.85205, memo:'음식점' },
+  { name:'따히엔 맥주거리', lat:21.03468, lng:105.85233, memo:'' },
+  { name:'하노이 야시장 (Chợ Đêm Phố Cổ)', lat:21.03378, lng:105.85092, memo:'금·토·일 저녁' },
+  { name:'24시 카페 (14 Tống Duy Tân)', lat:21.02939, lng:105.84353, memo:'' },
+  { name:'하노이 기찻길 (Nguyễn Thái Học)', lat:21.02867, lng:105.84206, memo:'' },
+  { name:'성 요셉 대성당', lat:21.02860, lng:105.84886, memo:'' },
+  { name:'10 Lý Quốc Sư', lat:21.03047, lng:105.84876, memo:'쌀국수집 (퍼 10)' },
+  { name:'Turtle Tower', lat:21.02784, lng:105.85227, memo:'호안끼엠 호 안의 탑' },
+  { name:'호안끼엠 호', lat:21.02867, lng:105.85215, memo:'' },
+  { name:'La Siesta Classic Ma May', lat:21.03425, lng:105.85325, memo:'호텔 · 94 Mã Mây' },
+  { name:'L7 West Lake Hanoi', lat:21.07479, lng:105.81239, memo:'롯데몰 웨스트레이크' },
+  { name:'롯데호텔 하노이', lat:21.03188, lng:105.81230, memo:'롯데센터 · 전망대 · 롯데마트' },
+  { name:'하노이 대우호텔', lat:21.03075, lng:105.81206, memo:'' },
+  { name:'Ba Mau Lake', lat:21.01312, lng:105.84041, memo:'' },
+  { name:'빈홈 스카이레이크 S2', lat:21.01973, lng:105.78159, memo:'' },
+  { name:'동쑤언 시장', lat:21.03826, lng:105.84967, memo:'재래시장' },
+  { name:'항가이 거리', lat:21.03180, lng:105.85020, memo:'실크·기념품 거리' },
+  { name:'짱띠엔 거리', lat:21.02477, lng:105.85335, memo:'짱띠엔 아이스크림' },
+  { name:'오페라 하우스', lat:21.02430, lng:105.85760, memo:'' },
+  { name:'탕롱 수상 인형 극장', lat:21.03170, lng:105.85346, memo:'공연 시간 확인·예매' },
+  { name:'분짜 흐엉 리엔', lat:21.01830, lng:105.85390, memo:'오바마 분짜 · 위치 대략' },
+  { name:'호치민 묘', lat:21.03678, lng:105.83469, memo:'오전만 개방 · 월/금 휴무' },
+  { name:'한기둥 사원', lat:21.03586, lng:105.83361, memo:'' },
+  { name:'탕롱 황성', lat:21.03628, lng:105.84030, memo:'' },
+  { name:'콩 카페 디엔비엔푸점', lat:21.03364, lng:105.83841, memo:'코코넛 커피' },
+  { name:'꽌 안 응온 본점', lat:21.02626, lng:105.84330, memo:'베트남 음식 · 18 Phan Bội Châu' },
+  { name:'쩐꾸옥 사원', lat:21.04788, lng:105.83684, memo:'서호의 사원' },
+  { name:'서밋 라운지', lat:21.04961, lng:105.84013, memo:'팬 퍼시픽 하노이 루프탑' },
+  { name:'롯데마트 · 탑 오브 하노이', lat:21.03227, lng:105.81263, memo:'롯데센터 하노이' },
+  { name:'베트남 군사 역사 박물관', lat:21.01159, lng:105.75471, memo:'시내에서 서쪽으로 약 9km' },
+];
+const P = n => { const p = PLACES.find(p => p.name.includes(n)); return { lat:p.lat, lng:p.lng }; };
+const S = (time, title, memo, pos) => ({ time, title, memo: memo || '', ...(pos || {}) });
+
+const DEFAULT_PLAN = {
+  '12-03': [
+    S('03:35','노이바이 공항 도착 (9G0411)','입국심사 · 수하물 찾기 · 환전/유심', P('노이바이')),
+    S('04:30','공항 → 숙소 (Grab)','약 40분. 새벽이라 Grab 미리 호출'),
+    S('05:15','숙소 체크인 · 취침','12/2부터 예약이라 바로 입실. 호스트에게 새벽 도착 미리 알리기', P('12/2~4')),
+    S('10:30','동쑤언 시장','숙소에서 걸어서 6분', P('동쑤언')),
+    S('11:00','반미 25 · 브런치','시장에서 걸어서 4분', P('반미 25')),
+    S('11:40','항가이 거리','호수 쪽으로 내려가며 구경 (걸어서 8분)', P('항가이')),
+    S('12:10','호안끼엠 호 · Turtle Tower','걸어서 5분', P('호안끼엠')),
+    S('12:50','짱띠엔 거리 · 아이스크림','호수 남쪽 끝에서 걸어서 5분', P('짱띠엔')),
+    S('13:10','오페라 하우스','걸어서 5분. 외관 구경·사진', P('오페라')),
+    S('13:45','성 요셉 대성당','걸어서 13분', P('성 요셉')),
+    S('14:10','포 10 (10 Lý Quốc Sư) · 늦은 점심','걸어서 3분', P('10 Lý')),
+    S('15:00','미도 스파 · 마사지','걸어서 3분. 60~90분, 전날 예약 추천', P('미도')),
+    S('16:45','하노이 기찻길 · 24시 카페','걸어서 11분. 기차 시간은 카페에 확인', P('기찻길')),
+    S('17:45','숙소에서 휴식','걸어서 13분', P('12/2~4')),
+    S('19:00','분짜닥킴 · 저녁','걸어서 8분', P('분짜닥킴')),
+    S('20:00','따히엔 맥주거리','걸어서 7분', P('따히엔')),
+    S('22:00','숙소 복귀','걸어서 10분. 내일 아침 크루즈 픽업 대비 짐 정리', P('12/2~4')),
+  ],
+  '12-04': [
+    S('06:30','퍼 자쭈옌 · 아침 쌀국수','오전 6시 오픈, 줄이 김. 숙소에서 걸어서 7분', P('퍼 자쭈옌')),
+    S('07:30','숙소 체크아웃','', P('12/2~4')),
+    S('08:00','크루즈 셔틀 픽업','★ 픽업 시간·장소는 칼리스타 바우처로 확인'),
+    S('11:30','하롱 선착장 도착 · 체크인','지도 위치는 대략. 선착장은 바우처 확인', { lat:20.9290, lng:107.0450 }),
+    S('12:30','승선 · 점심',''),
+    S('15:00','카약 · 수영 등 액티비티',''),
+    S('17:30','선셋 파티',''),
+    S('19:00','선상 디너',''),
+  ],
+  '12-05': [
+    S('06:30','일출 · 태극권',''),
+    S('07:00','가벼운 조식 · 동굴/섬 투어',''),
+    S('09:30','객실 체크아웃 · 브런치',''),
+    S('11:00','하선 · 셔틀 탑승','★ 하선 시간은 바우처 확인', { lat:20.9290, lng:107.0450 }),
+    S('14:30','하노이 도착 → Oakwood (Grab)',''),
+    S('15:00','Oakwood 체크인 · 휴식','체크인 15:00부터', P('Oakwood')),
+    S('16:15','쩐꾸옥 사원','Grab 약 8분. 해 지기 전에 방문', P('쩐꾸옥')),
+    S('16:50','서호 산책','사원 앞 호숫가 길 (Thanh Niên)', { lat:21.0487, lng:105.8380 }),
+    S('17:10','서밋 라운지 · 일몰','걸어서 5분. 12월 일몰은 17:15쯤', P('서밋')),
+    S('18:30','Grab → 올드쿼터','약 10분'),
+    S('18:45','폭람 · 저녁','', P('폭람')),
+    S('20:00','탕롱 수상 인형 극장','걸어서 4분. ★ 공연 시간 확인·예매 필요', P('수상 인형')),
+    S('21:00','하노이 야시장','걸어서 4분. 금·토·일 저녁만 열림', P('야시장')),
+    S('21:45','따히엔 맥주거리','걸어서 3분', P('따히엔')),
+    S('22:30','Grab → Oakwood','약 15분', P('Oakwood')),
+  ],
+  '12-06': [
+    S('07:45','호텔 조식','조식 포함', P('Oakwood')),
+    S('08:40','Grab → 호치민 묘','약 15분'),
+    S('09:00','호치민 묘','오전만 개방(11시쯤 마감), 월·금 휴무. 반바지·민소매 불가', P('호치민 묘')),
+    S('09:45','한기둥 사원','바로 옆, 걸어서 3분', P('한기둥')),
+    S('10:30','탕롱 황성','걸어서 10분', P('탕롱 황성')),
+    S('11:45','콩 카페 디엔비엔푸점','걸어서 5분', P('콩 카페')),
+    S('12:30','꽌 안 응온 · 점심','걸어서 12분', P('꽌 안')),
+    S('14:00','Grab → 롯데센터','약 15분'),
+    S('14:15','롯데마트 구경 · 휴식','기념품은 나가기 직전에 구매', P('롯데마트')),
+    S('16:30','탑 오브 하노이 · 일몰','롯데센터 옥상. 일몰 17:15쯤', P('롯데마트')),
+    S('18:15','롯데마트 기념품 쇼핑 · 저녁','', P('롯데마트')),
+    S('20:00','Grab → Oakwood','약 15분', P('Oakwood')),
+  ],
+  '12-07': [
+    S('08:00','호텔 조식 · 수영','수영장 06:00~21:00', P('Oakwood')),
+    S('09:30','체크아웃 · 짐 맡기기','체크아웃 12:00까지. 프런트에 짐 보관', P('Oakwood')),
+    S('10:00','롯데몰 웨스트레이크 (L7)','Grab 약 8분. 쇼핑 · 점심', P('L7')),
+    S('13:00','Oakwood에서 짐 찾기','Grab 약 8분', P('Oakwood')),
+    S('13:30','Grab → 노이바이 공항','약 30분'),
+    S('14:05','공항 도착 · 체크인','출발 2시간 반 전', P('노이바이')),
+    S('16:35','하노이 출발 (9G0410)','22:45 인천 도착', P('노이바이')),
+  ],
+};
+
+// ───────── 명소별 특징 · 메뉴 · 기념품 · 방문 후기 요약 ─────────
+// 일정 제목에 앞의 단어가 들어 있으면 카드 아래에 표시된다. 가격은 대략이며 바뀔 수 있다.
+const TIPS = [
+  ['공항 도착 (9G', '입국심사에 30~60분 걸리는 날이 많아요. 환전은 공항에서 택시비 정도만 하고 나머지는 시내 금은방이 유리하다는 후기가 많습니다. 시내까지 Grab은 30~40만 동 선.'],
+  ['동쑤언', '하노이에서 가장 큰 도매시장. 1층은 잡화·기념품, 2~3층은 옷·원단입니다.\n살 만한 것: 캐슈넛·건과일, 커피 드리퍼(핀), 라탄 가방, 자수 파우치, 마그넷.\n후기: 도매 위주라 낱개는 비싸게 부르니 절반쯤에서 흥정 시작. 통로가 좁고 더우며 소매치기 주의. 오후 5~6시면 닫아요. 시장 뒤 골목에 길거리 음식이 모여 있습니다.'],
+  ['반미 25', '한국인에게 가장 유명한 반미집.\n메뉴: 믹스(이것저것 다 든 것), 바비큐 포크, 치킨 치즈. 3~5만 동 선.\n후기: 바게트가 바삭하고 줄은 길어도 금방 빠져요. 고수는 빼 달라고 하면 빼 줍니다. 길 건너편에 앉아서 먹는 매장이 따로 있어요.'],
+  ['항가이', '실크 거리로 불리는 쇼핑 골목.\n살 만한 것: 실크 스카프, 자수 소품, 아오자이 맞춤, 수공예품.\n후기: 정찰제 매장이 많아 흥정 부담이 적다는 평. 실크는 가게마다 품질 차이가 커서 만져 보고 고르세요.'],
+  ['호안끼엠', '하노이의 중심 호수. 한 바퀴 30~40분. 빨간 다리로 이어진 응옥썬 사당은 소액 입장료가 있습니다. 호수 가운데 거북탑은 들어갈 수 없고 사진만 찍어요.\n후기: 금요일 저녁~일요일은 차 없는 거리라 걷기 좋고, 해 질 무렵과 야경이 가장 예쁘다는 평.'],
+  ['짱띠엔', '1958년부터 이어 온 짱띠엔 아이스크림 본점이 있는 거리.\n메뉴: 녹두, 코코넛, 찹쌀(꼼) 맛 바. 1~2만 동.\n후기: 가게 앞에 서서 먹는 분위기. 달지 않고 옛날 맛이라는 평이 많아요.'],
+  ['오페라 하우스', '1911년 프랑스 식민지 시절 파리 오페라 극장을 본떠 지은 건물.\n후기: 내부는 공연을 보거나 투어 때만 들어갈 수 있어 대부분 외관 사진만 찍습니다. 조명 켜진 저녁이 더 예뻐요.'],
+  ['성 요셉', '1886년에 지은 네오고딕 성당. 입장 무료.\n후기: 내부는 미사 시간 전후에만 열려 못 들어가는 경우가 많아요. 앞 광장 카페에서 성당을 보며 쉬는 코스가 인기입니다.'],
+  ['포 10', '소고기 쌀국수 전문점.\n메뉴: 타이 찐(살짝 익힌 고기+삶은 고기), 타이 남(양지). 튀김빵(꿔이)을 국물에 적셔 먹어요. 7~10만 동 선.\n후기: 국물이 깔끔하고 한국인 입맛에 잘 맞는다는 평. 합석이 기본이고 줄은 빨리 줄어듭니다.'],
+  ['미도 스파', '한국인이 많이 찾는 마사지 숍.\n후기: 압이 세고 친절하다는 평. 저녁 시간은 예약이 차니 전날 예약하세요. 가격과 팁 포함 여부는 예약할 때 확인하는 게 좋습니다.'],
+  ['기찻길', '집 사이로 기차가 지나가는 골목.\n후기: 카페 손님만 들여보내는 경우가 많아 카페 직원 안내로 들어갑니다. 단속으로 입구를 막는 날도 있어요. 기차가 올 때는 벽 쪽 자리에서 일어나지 말고 직원 안내를 따르세요. 음료는 5~8만 동 선.'],
+  ['분짜닥킴', '1966년부터 영업한 분짜 노포.\n메뉴: 분짜 + 넴 꾸아 베(게살 튀김 롤) 세트.\n후기: 고기 양이 많고 숯불 향이 좋다는 평. 다만 가격이 다른 집보다 비싸다는 후기도 많아요. 주변에 비슷한 간판이 있으니 1 Hàng Mành 본점인지 확인하세요.'],
+  ['따히엔', '목욕탕 의자에 앉아 맥주를 마시는 골목. 저녁 7시 이후에 붐빕니다.\n메뉴: 생맥주(비아 허이), 튀긴 발효 소시지(넴 쭈어 란), 감자튀김.\n후기: 호객이 심하니 앉기 전에 메뉴판 가격을 확인하세요. 사람이 많아 휴대폰·지갑 조심.'],
+  ['폭람', 'tvN 짠내투어에 나온 식당으로 알려진 곳. 가기 전에 영업시간과 메뉴를 구글맵 후기로 한 번 확인하세요.'],
+  ['퍼 자쭈옌', '현지인이 줄 서는 쌀국수 노포 (49 Bát Đàn).\n메뉴: 타이 남(살짝 익힌 고기+양지)이 인기. 5~7만 동 선.\n후기: 줄 서서 주문·계산하고 직접 그릇을 들고 가는 셀프 방식. 국물이 진하고 고기가 많다는 평. 재료가 떨어지면 일찍 닫아요.'],
+  ['승선', '후기에서 자주 나오는 준비물: 멀미약, 수영복, 방수팩, 얇은 겉옷(12월 저녁 갑판은 쌀쌀). 음료·주류는 불포함인 경우가 많으니 바우처를 확인하세요.'],
+  ['쩐꾸옥', '6세기에 세워진 하노이에서 가장 오래된 사원. 11층 붉은 탑이 상징이고 입장 무료.\n후기: 무릎·어깨를 가리는 옷이 필요해요. 점심시간에는 문을 닫고 오후 5~6시에 마감합니다. 해 질 무렵 호수와 함께 찍는 사진이 예쁘다는 평.'],
+  ['서호', '하노이에서 가장 큰 호수. 쩐꾸옥 사원 앞 탄니엔 길이 산책로입니다.\n후기: 일몰이 좋고, 길가에서 파는 새우튀김(반 똠 호 떠이)이 이 동네 명물이에요.'],
+  ['서밋 라운지', '팬 퍼시픽 하노이 20층 루프탑 바. 서호가 한눈에 보여요.\n메뉴: 칵테일 20~30만 동 선.\n후기: 일몰 시간 창가·테라스 자리는 예약하는 게 안전. 슬리퍼·민소매는 피하세요.'],
+  ['수상 인형', '물 위에서 하는 베트남 전통 인형극. 약 50분.\n후기: 베트남어 공연이지만 내용 이해에 무리가 없고, 앞쪽 좌석일수록 잘 보인다는 평. 인기 시간대는 매진되니 미리 예매하세요. 좌석 10~20만 동 선.'],
+  ['야시장', '금·토·일 저녁에만 열리는 거리 시장 (항다오 거리~동쑤언 시장).\n살 만한 것: 마그넷, 티셔츠, 라탄 소품, 건과일.\n후기: 물건 품질은 평범하고 흥정이 필수. 구경과 길거리 음식(꼬치, 과일 주스)이 더 재밌다는 평. 소매치기 조심.'],
+  ['호치민 묘', '호치민 주석의 시신이 안치된 곳. 입장 무료.\n후기: 보안 검색과 줄 때문에 30~60분 걸려요. 반바지·민소매 불가, 안에서는 촬영·대화 금지. 큰 가방과 카메라는 맡겨야 합니다. 보수 기간에는 휴관하니 가기 전에 확인.'],
+  ['한기둥', '1049년에 지은, 기둥 하나 위에 연꽃 모양으로 올린 작은 사원.\n후기: 5~10분이면 다 봅니다. 호치민 묘 바로 옆이라 묶어서 보는 코스.'],
+  ['탕롱 황성', '유네스코 세계유산인 옛 왕궁 터. 입장료 약 10만 동.\n후기: 정문(도안몬) 위에 올라가 사진 찍기 좋고, 베트남전 때 쓰던 지하 벙커(D67)가 볼거리. 1시간~1시간 반이면 충분해요. 그늘이 적습니다.'],
+  ['콩 카페', '군대 콘셉트 인테리어로 유명한 체인 카페.\n메뉴: 코코넛 스무디 커피(꼿 즈어 까페)가 대표. 6~7만 동 선.\n후기: 달고 시원해서 한국인에게 인기. 연유 커피나 코코넛 녹두 스무디도 많이 시킵니다.'],
+  ['꽌 안 응온', '베트남 전국의 길거리 음식을 한곳에 모아 놓은 식당. 정원이 있는 빌라 건물.\n메뉴: 반 쎄오(부침개), 분짜, 넴(스프링롤), 짜 까(생선 요리). 2인 40~60만 동 선.\n후기: 깔끔해서 베트남 음식 입문용으로 좋다는 평. 점심 피크에는 대기가 있어요.'],
+  ['롯데마트 기념품', '한국인 여행자 기념품 쇼핑 1순위.\n살 만한 것: G7·콘삭 커피, 캐슈넛, 건망고, 하오하오 라면, 쌀국수 라면, 칠리소스, 코코넛 과자, 달리 치약, 노니 제품.\n후기: 정찰제라 시장보다 편하고, 인기 상품은 한국어 표시가 붙어 있어요. 액체류(소스)는 위탁 수하물에 넣으세요.'],
+  ['탑 오브 하노이', '롯데호텔 꼭대기의 야외 루프탑 바. 하노이 시내가 360도로 보여요.\n메뉴: 칵테일 20~35만 동 선.\n후기: 일몰 30분 전에 가야 좋은 자리를 잡는다는 평. 비·강풍이면 문을 닫고, 바람이 세니 겉옷을 챙기세요. 오픈 시간은 가기 전에 확인.'],
+  ['롯데몰 웨스트레이크', '2023년에 문을 연 하노이 최대급 쇼핑몰.\n후기: 롯데마트, 푸드코트, 아쿠아리움이 한 건물에 있어 마지막 날 쇼핑·식사를 한 번에 해결하기 좋다는 평. 못 산 기념품은 여기 롯데마트에서 사면 됩니다.'],
+];
+const tipFor = t => { if (/^Grab/.test(t)) return ''; const hit = TIPS.find(x => t.includes(x[0])); return hit ? hit[1] : ''; };
+
+// ───────── 상태 · 저장 ─────────
+const KEY = 'hanoi-trip-v2';
+let uid = 0;
+const withIds = plan => { for (const d in plan) plan[d].forEach(s => s.id = s.id || ('s' + Date.now() + (uid++))); return plan; };
+const clone = o => JSON.parse(JSON.stringify(o));
+function load() {
+  try { const raw = localStorage.getItem(KEY); if (raw) return withIds(JSON.parse(raw)); } catch (e) {}
+  return withIds(clone(DEFAULT_PLAN));
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(plan)); } catch (e) {} }
+let plan = load();
+let day = DAYS[0].key;
+let pickingId = null;   // 지도에서 위치를 찍는 중인 일정
+
+// ───────── 지도 ─────────
+// 구글맵 API 키가 저장돼 있으면 구글맵, 없으면 무료 지도(Leaflet)로 그린다.
+// 두 지도 모두 같은 4가지 기능만 제공한다: draw(그리기) · focus(이동) · closePopup · resize
+const GKEY = 'hanoi-gmaps-key';
+const CENTER = { lat:21.0335, lng:105.8490 };
+const gmaps = s => 'https://www.google.com/maps/search/?api=1&query=' + s.lat + ',' + s.lng;
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const stops = () => plan[day];
+const sortStops = () => stops().sort((a, b) => a.time.localeCompare(b.time));
+const stopPopup = s => '<b>' + esc(s.time + ' ' + s.title) + '</b><br>' + esc(s.memo) + '<br><a target="_blank" href="' + gmaps(s) + '">구글맵에서 열기</a>';
+const candPopup = (p, idx) => '<b>' + esc(p.name) + '</b><br>' + esc(p.memo) + '<br><button onclick="addFromPlace(' + idx + ')">이 날 일정에 추가</button>';
+const moved = (s, lat, lng) => { s.lat = lat; s.lng = lng; save(); render(false); };
+// 미리보기 창처럼 confirm/alert이 막힌 곳에서도 멈추지 않게 감싼다
+const ask = m => { try { return confirm(m); } catch (e) { return true; } };
+const say = m => { try { alert(m); } catch (e) { console.warn(m); } };
+let M = null;   // 현재 사용 중인 지도
+let marks = {}; // 일정 id → 지도 핀 (카드를 누르면 해당 핀으로 이동하기 위해 기억해 둔다)
+// 목록의 카드를 강조하고 보이는 곳으로 스크롤한다 (핀을 눌렀을 때도 호출)
+function hilite(id) {
+  document.querySelectorAll('.stop.active').forEach(el => el.classList.remove('active'));
+  const el = document.querySelector('.stop[data-id="' + id + '"]');
+  if (el) { el.classList.add('active'); el.scrollIntoView({ block:'nearest', behavior:'smooth' }); }
+}
+
+function leafletMap() {
+  const map = L.map('map').setView([CENTER.lat, CENTER.lng], 15);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom:19, subdomains:'abcd', attribution:'© OpenStreetMap © CARTO' }).addTo(map);
+  const layer = L.layerGroup().addTo(map);
+  map.on('click', e => { if (pickingId) setPos(e.latlng.lat, e.latlng.lng); });
+  return {
+    draw(fit) {
+      layer.clearLayers(); marks = {};
+      const located = stops().filter(s => s.lat != null);
+      const pts = located.map(s => [s.lat, s.lng]);
+      if (pts.length > 1) L.polyline(pts, { color:'#d9480f', weight:3, opacity:.6, dashArray:'6 6' }).addTo(layer);
+      located.forEach((s, i) => {
+        const m = L.marker([s.lat, s.lng], { draggable:true, icon:L.divIcon({ className:'', html:'<div class="pin">' + (i + 1) + '</div>', iconSize:[28, 28], iconAnchor:[14, 14] }) });
+        m.bindPopup(stopPopup(s));
+        m.on('click', () => hilite(s.id));
+        m.on('dragend', () => { const p = m.getLatLng(); moved(s, p.lat, p.lng); });
+        m.addTo(layer); marks[s.id] = m;
+      });
+      PLACES.forEach((p, idx) => {
+        const m = L.marker([p.lat, p.lng], { icon:L.divIcon({ className:'', html:'<div class="cand"></div>', iconSize:[14, 14], iconAnchor:[7, 7] }), zIndexOffset:-500 });
+        m.bindPopup(candPopup(p, idx));
+        m.on('click', () => { if (pickingId) { setPos(p.lat, p.lng, p.name); m.closePopup(); } });
+        m.addTo(layer);
+      });
+      if (fit && pts.length && map.getSize().y > 0) map.fitBounds(L.latLngBounds(pts).pad(0.25), { maxZoom:16 });
+    },
+    focus: s => { map.flyTo([s.lat, s.lng], 17, { duration:.6 }); if (marks[s.id]) marks[s.id].openPopup(); },
+    closePopup: () => map.closePopup(),
+    resize: () => map.invalidateSize(),
+  };
+}
+
+function googleMap() {
+  const G = google.maps;
+  const map = new G.Map(document.getElementById('map'), { center:CENTER, zoom:15, mapTypeControl:false, streetViewControl:false, fullscreenControl:false, gestureHandling:'greedy', clickableIcons:false });
+  const info = new G.InfoWindow();
+  let items = [];
+  const dot = (color, scale) => ({ path:G.SymbolPath.CIRCLE, scale, fillColor:color, fillOpacity:1, strokeColor:'#fff', strokeWeight:2 });
+  map.addListener('click', e => { if (pickingId) setPos(e.latLng.lat(), e.latLng.lng()); else info.close(); });
+  return {
+    draw(fit) {
+      items.forEach(o => o.setMap(null)); items = []; marks = {}; info.close();
+      const located = stops().filter(s => s.lat != null);
+      const pts = located.map(s => ({ lat:s.lat, lng:s.lng }));
+      if (pts.length > 1) items.push(new G.Polyline({ map, path:pts, strokeColor:'#d9480f', strokeOpacity:.6, strokeWeight:3 }));
+      PLACES.forEach((p, idx) => {
+        const m = new G.Marker({ map, position:p, icon:dot('#5c7c99', 6), zIndex:1, title:p.name });
+        m.addListener('click', () => { if (pickingId) return setPos(p.lat, p.lng, p.name); info.setContent(candPopup(p, idx)); info.open({ map, anchor:m }); });
+        items.push(m);
+      });
+      located.forEach((s, i) => {
+        const m = new G.Marker({ map, position:{ lat:s.lat, lng:s.lng }, draggable:true, zIndex:100 + i, icon:dot('#d9480f', 13), label:{ text:String(i + 1), color:'#fff', fontWeight:'700', fontSize:'12px' } });
+        m.addListener('click', () => { info.setContent(stopPopup(s)); info.open({ map, anchor:m }); hilite(s.id); });
+        m.addListener('dragend', () => { const p = m.getPosition(); moved(s, p.lat(), p.lng()); });
+        items.push(m); marks[s.id] = m;
+      });
+      if (fit && pts.length) {
+        if (pts.length === 1) { map.setCenter(pts[0]); map.setZoom(16); return; }
+        const b = new G.LatLngBounds(); pts.forEach(p => b.extend(p)); map.fitBounds(b, 60);
+        G.event.addListenerOnce(map, 'idle', () => { if (map.getZoom() > 16) map.setZoom(16); });
+      }
+    },
+    focus: s => { map.setZoom(17); map.panTo({ lat:s.lat, lng:s.lng }); if (marks[s.id]) { info.setContent(stopPopup(s)); info.open({ map, anchor:marks[s.id] }); } },
+    closePopup: () => info.close(),
+    resize: () => {},
+  };
+}
+function drawMap(fit) { if (M) M.draw(fit); }
+
+function setPos(lat, lng, name) {
+  const s = stops().find(s => s.id === pickingId); if (!s) return;
+  s.lat = lat; s.lng = lng;
+  if (name && (!s.title || s.title === '새 일정')) s.title = name;
+  pickingId = null; save(); render(false);
+}
+window.addFromPlace = idx => {
+  const p = PLACES[idx];
+  const last = stops()[stops().length - 1];
+  stops().push(withStop({ time: last ? plusHour(last.time) : '09:00', title:p.name, memo:p.memo, lat:p.lat, lng:p.lng }));
+  M.closePopup(); sortStops(); save(); render(false);
+};
+const withStop = s => (s.id = 's' + Date.now() + (uid++), s);
+const plusHour = t => { const [h, m] = t.split(':').map(Number); return String(Math.min(h + 1, 23)).padStart(2, '0') + ':' + String(m).padStart(2, '0'); };
+
+// ───────── 목록 ─────────
+const panel = document.getElementById('panel');
+function render(fit) {
+  document.getElementById('tabs').innerHTML = DAYS.map(d => '<button class="' + (d.key === day ? 'on' : '') + '" data-day="' + d.key + '">' + d.label + '</button>').join('');
+  const d = DAYS.find(d => d.key === day);
+  let n = 0;
+  panel.innerHTML = '<div class="dayhead"><h2>' + d.title + '</h2><span>' + d.sub + '</span></div>' +
+    stops().map(s => {
+      const has = s.lat != null; if (has) n++;
+      return '<div class="stop' + (s.id === pickingId ? ' picking' : '') + (has ? ' has-pos' : '') + '" data-id="' + s.id + '">' +
+        '<div class="num' + (has ? '' : ' none') + '">' + (has ? n : '·') + '</div><div>' +
+        '<div class="row1"><input type="time" data-f="time" value="' + s.time + '"><input class="title" data-f="title" value="' + esc(s.title) + '" placeholder="일정 이름"></div>' +
+        '<textarea data-f="memo" rows="1" placeholder="메모">' + esc(s.memo) + '</textarea>' +
+        (tipFor(s.title) ? '<details class="tip"><summary>특징 · 메뉴 · 후기</summary><p>' + esc(tipFor(s.title)).replace(/\n/g, '<br>') + '</p></details>' : '') +
+        '<div class="acts">' +
+          (has ? '<button data-a="show">지도에서 보기</button><a target="_blank" href="' + gmaps(s) + '">구글맵</a>' : '') +
+          '<button data-a="pick">' + (s.id === pickingId ? '위치 찍기 취소' : (has ? '위치 바꾸기' : '위치 찍기')) + '</button>' +
+          '<button data-a="del">삭제</button>' +
+        '</div></div></div>';
+    }).join('') +
+    '<button class="add" id="btnAdd">+ 일정 추가</button>' +
+    '<p class="hint">시간을 바꾸면 순서가 자동으로 정렬됩니다. 지도의 번호 핀은 끌어서 옮길 수 있고, 파란 점은 구글맵 리스트에 저장해 둔 장소입니다.</p>';
+  panel.querySelectorAll('textarea').forEach(grow);
+  const bn = document.getElementById('banner'); if (!bn.dataset.notice) bn.style.display = pickingId ? 'block' : 'none';
+  drawMap(fit);
+}
+const grow = t => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; };
+
+document.getElementById('tabs').addEventListener('click', e => {
+  const k = e.target.dataset.day; if (!k) return;
+  day = k; pickingId = null; render(true); panel.scrollTop = 0;
+});
+panel.addEventListener('input', e => {
+  const f = e.target.dataset.f; if (!f || f === 'time') return;
+  const s = stops().find(s => s.id === e.target.closest('.stop').dataset.id);
+  s[f] = e.target.value; if (f === 'memo') grow(e.target); save();
+});
+panel.addEventListener('change', e => {
+  const f = e.target.dataset.f; if (!f) return;
+  const s = stops().find(s => s.id === e.target.closest('.stop').dataset.id);
+  if (f === 'time') { if (!e.target.value) { e.target.value = s.time; return; } s.time = e.target.value; sortStops(); }
+  save(); render(false);
+});
+panel.addEventListener('click', e => {
+  if (e.target.id === 'btnAdd') {
+    const last = stops()[stops().length - 1];
+    const s = withStop({ time: last ? plusHour(last.time) : '09:00', title:'새 일정', memo:'' });
+    stops().push(s); sortStops(); save(); render(false);
+    const el = panel.querySelector('[data-id="' + s.id + '"] .title'); if (el) { el.focus(); el.select(); }
+    return;
+  }
+  const card = e.target.closest('.stop'); if (!card) return;
+  const id = card.dataset.id;
+  const s = stops().find(s => s.id === id);
+  const a = e.target.dataset.a;
+  if (!a) {   // 카드의 빈 곳이나 번호를 누르면 지도에서 그 위치로 이동
+    if (!e.target.closest('input, textarea, a, button, details') && s.lat != null && !pickingId) { hilite(id); M.focus(s); }
+    return;
+  }
+  if (a === 'del') { if (ask('"' + s.title + '" 일정을 삭제할까요?')) { plan[day] = stops().filter(x => x.id !== id); save(); render(false); } }
+  if (a === 'pick') { pickingId = pickingId === id ? null : id; render(false); }
+  if (a === 'show') { hilite(id); M.focus(s); }
+});
+
+// ───────── 내보내기 · 가져오기 · 초기화 ─────────
+document.getElementById('btnExport').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(plan, null, 2)], { type:'application/json' }));
+  a.download = '하노이-일정.json'; a.click();
+};
+const file = document.getElementById('file');
+document.getElementById('btnImport').onclick = () => file.click();
+file.onchange = async () => {
+  try {
+    const data = JSON.parse(await file.files[0].text());
+    if (!DAYS.every(d => Array.isArray(data[d.key]))) throw new Error();
+    plan = withIds(data); save(); render(true);
+  } catch (e) { say('일정 파일을 읽을 수 없습니다.'); }
+  file.value = '';
+};
+document.getElementById('btnReset').onclick = () => {
+  if (ask('수정한 내용을 모두 지우고 처음 일정으로 되돌릴까요?')) { plan = withIds(clone(DEFAULT_PLAN)); save(); render(true); }
+};
+
+// ───────── 구글맵 키 설정 · 시작 ─────────
+const getKey = () => { try { return localStorage.getItem(GKEY) || ''; } catch (e) { return ''; } };
+const setKey = k => { try { k ? localStorage.setItem(GKEY, k) : localStorage.removeItem(GKEY); } catch (e) {} };
+const btnKey = document.getElementById('btnKey');
+btnKey.textContent = getKey() ? '구글맵 사용 중' : '구글맵으로 보기';
+const dlg = document.getElementById('keyDlg'), keyInput = document.getElementById('keyInput');
+btnKey.onclick = () => { keyInput.value = getKey(); dlg.showModal(); keyInput.focus(); };
+document.getElementById('keyCancel').onclick = () => dlg.close();
+document.getElementById('keyClear').onclick = () => { setKey(''); location.reload(); };
+document.getElementById('keyForm').onsubmit = e => { e.preventDefault(); setKey(keyInput.value.trim()); location.reload(); };
+function start(make) {
+  M = make(); render(true);
+  // 지도 칸 크기가 정해지거나 바뀔 때(창 크기 조절, 휴대폰 회전) 지도를 다시 맞춘다
+  let first = true;
+  new ResizeObserver(() => { M.resize(); if (first) { first = false; drawMap(true); } }).observe(document.getElementById('map'));
+}
+// 키가 틀리면 저장된 키를 지우고 무료 지도로 돌아간 뒤, 이유를 화면 위 띠로 알려준다
+function fallback(msg) { setKey(''); try { sessionStorage.setItem('hanoi-notice', msg + ' 무료 지도로 돌아왔습니다.'); } catch (e) {} location.reload(); }
+try {
+  const n = sessionStorage.getItem('hanoi-notice');
+  if (n) { sessionStorage.removeItem('hanoi-notice'); const b = document.getElementById('banner'); b.textContent = n; b.style.display = 'block'; b.dataset.notice = '1'; setTimeout(() => { delete b.dataset.notice; b.style.display = 'none'; b.textContent = '지도를 눌러 위치를 정하세요 (저장한 장소 점을 눌러도 됩니다)'; }, 8000); }
+} catch (e) {}
+if (getKey()) {
+  window.gm_authFailure = () => fallback('구글맵 API 키가 올바르지 않거나, 이 키에 Maps JavaScript API가 켜져 있지 않습니다.');
+  window.gmReady = () => start(googleMap);
+  const sc = document.createElement('script');
+  sc.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(getKey()) + '&language=ko&region=KR&callback=gmReady';
+  sc.onerror = () => fallback('구글맵을 불러오지 못했습니다. 인터넷 연결을 확인하세요.');
+  document.head.appendChild(sc);
+} else {
+  start(leafletMap);
+}
+</script>
+</body>
+</html>
